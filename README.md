@@ -8,5 +8,5 @@
 - Loop to find optimal synthesis models [here](find_model.R) (Rscript)
 - Loop to find optimal variable sequence [here](find_sequence.R) (Rscript)
 - Function to calculate the Targeted Correct Attribution Probability [here](tcap.R) (Rscript)
-- Data prep code [here](data_tree_ext.R) (Rscript)
+- Code for data prep [here](data_tree_ext.R) (Rscript)
 
