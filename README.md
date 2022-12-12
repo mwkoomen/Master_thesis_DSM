@@ -25,8 +25,8 @@ Last, putting it all together, a pdf can be compiled by running the Rmarkdown fi
 
 ### Info on the R-session used for compilation: 
 
-R version 4.2.1 (2022-06-23 ucrt)
-Platform: x86_64-w64-mingw32/x64 (64-bit)
+R version 4.2.1 (2022-06-23 ucrt) <br> 
+Platform: x86_64-w64-mingw32/x64 (64-bit) 
 Running under: Windows 10 x64 (build 19045)
 
 Matrix products: default
@@ -39,6 +39,7 @@ LC_NUMERIC=C
 LC_TIME=German_Switzerland.utf8    
 
 attached base packages:
+
 |:-------------|:-------------|:-------------|
 | stats |  graphics | grDevices utils  |
 | datasets |    methods   |   base |
