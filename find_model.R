@@ -1,6 +1,7 @@
-# Find model 
+# Loop to find optimal model 
 
-# Main code to find best performing model per variable - Can only be run within Uni Bern intranet
+# Main code to find best performing model per variable 
+  #! Work directory needs to be set manually
 
 #load libraries ####
 library(rio)
@@ -8,9 +9,12 @@ library(tidyverse)
 library(synthpop)
 library(gghighlight)
 
-#run data prep #### Can only be run on local machine
-#source("H:/IPSDS/Master thesis/Data/data_tree_ext.R")
-#obs <- import.tree()
+#set work directory manually
+wd <- "xxx"
+
+#run data prep: needs data_tree_ext.R in work directory
+source(paste0(wd,"/data_tree_ext.R"))
+obs <- import.tree()
 
 # parameters ####
 m <- 5
@@ -99,5 +103,5 @@ for (v in vseq){
   test.model <- rbind(test.model,x)
   }
 }
-#setwd("H:/IPSDS/Master thesis/Data") Can only be run on local machine
-#save(test.model, file="test_model_redux4.RData")
+setwd(wd) 
+save(test.model, file="test_model_redux4.RData")
