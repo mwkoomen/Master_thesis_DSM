@@ -24,7 +24,7 @@ Last, putting it all together, a pdf can be compiled by running the Rmarkdown fi
 5. Code to compile pdf [here](master_thesis.Rmd) (Rmarkdown)
 <br>
 <br>
- ___ 
+ ---
 <br>
 ### Info on the R-session used for compilation: 
 
