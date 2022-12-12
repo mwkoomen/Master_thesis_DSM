@@ -1,6 +1,7 @@
 # Master thesis data prep ####
 
-#Main data import function - Can only be run within Uni Bern intranet
+#Main data preparation function
+  #!Workdirectory should be set
 
 # load libraries ####
 library(rio)
@@ -9,7 +10,7 @@ library(tidyverse)
 # import function ####
 import.tree <- function(){
   
-  setwd("T:/Team/Publizierte Daten/K2/Release 2021 [as downloaded at FORSbase]/DATA/")
+  setwd("xxx") # Set workdirectory where datafiles are saved
   
   #import 
   import <- c("Wave_0","Wave_1","Wave_2","Weights")
