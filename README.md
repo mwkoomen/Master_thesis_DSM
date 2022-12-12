@@ -2,7 +2,8 @@
 ## Statistical disclosure control for linked panel survey and register data
 ### Master thesis in Applied Data Science & Measurement (Mannheim Business School)
 
-- Main thesis text [here](Mitigating_panel_attrition_with_syndata.pdf) (pdf)
+- Author: Maarten Koomen
+- Main thesis text [here](Mitigating_panel_attrition_with_syndata.pdf) (pdf) <br> <br>
 
 ### Code and guide for reproduction
 
@@ -22,41 +23,86 @@ After these loops are completed, the function to calculate the TCAP can be added
 Last, putting it all together, a pdf can be compiled by running the Rmarkdown file below:
 
 5. Code to compile pdf [here](master_thesis.Rmd) (Rmarkdown)
-<br>
-<br>
- ---
-<br>
+<br> <br> 
+
 ### Info on the R-session used for compilation: 
 
-R version 4.2.1 (2022-06-23 ucrt) <br> 
-Platform: x86_64-w64-mingw32/x64 (64-bit) 
-Running under: Windows 10 x64 (build 19045)
-
-Matrix products: default
+> R version 4.2.1 (2022-06-23 ucrt) <br> 
+> Platform: x86_64-w64-mingw32/x64 (64-bit) <br> 
+> Running under: Windows 10 x64 (build 19045) <br> 
+> Matrix products: default
 
 locale:
-LC_COLLATE=German_Switzerland.utf8 
-LC_CTYPE=C                         
-LC_MONETARY=German_Switzerland.utf8
-LC_NUMERIC=C                       
-LC_TIME=German_Switzerland.utf8    
+>LC_COLLATE=German_Switzerland.utf8, LC_CTYPE=C                         
+>LC_MONETARY=German_Switzerland.utf8, LC_NUMERIC=C                       
+>LC_TIME=German_Switzerland.utf8    
 
 attached base packages: <br>
-|              |              |              |
-|:-------------|:-------------|:-------------|
-| stats        |  graphics    | grDevices utils  |
-| datasets     |    methods   |   base       |
-
-other attached packages:
- [1] arm_1.13-1        lme4_1.1-31      
- [3] Matrix_1.4-1      MASS_7.3-57      
- [5] tidytext_0.3.4    gridExtra_2.3    
- [7] sjlabelled_1.2.0  gghighlight_0.4.0
- [9] rmarkdown_2.18    nnet_7.3-18      
-[11] DescTools_0.99.47 expss_0.11.4     
-[13] maditr_0.8.3      synthpop_1.8-0   
-[15] forcats_0.5.2     stringr_1.4.1    
-[17] dplyr_1.0.10      purrr_0.3.5      
-[19] readr_2.1.3       tidyr_1.2.1      
-[21] tibble_3.1.8      ggplot2_3.4.0    
-[23] tidyverse_1.3.2   rio_0.5.29       
+<table align="left">
+    <tr>
+        <td align="left">stats</td>
+        <td align="left">graphics</td>
+        <td align="left">grDevices utils</td>
+    </tr>
+    <tr>
+        <td align="left">datasets</td>
+        <td align="left">methods</td>
+        <td align="left">base</td>
+    </tr>
+</table>
+<br>
+<br>
+<br>
+<br>
+other attached packages: 
+<br>
+<table align="left">
+    <tr>
+        <td align="left">arm_1.13-1</td>
+        <td align="left">lme4_1.1-31</td>
+    </tr>
+    <tr>
+        <td align="left">Matrix_1.4-1</td>
+        <td align="left">MASS_7.3-57</td>
+    </tr>
+    <tr>
+        <td align="left">tidytext_0.3.4</td>
+        <td align="left">gridExtra_2.3</td>
+    </tr>
+    <tr>
+        <td align="left">sjlabelled_1.2.0</td>
+        <td align="left">gghighlight_0.4.0</td>
+    </tr>
+    <tr>
+        <td align="left">rmarkdown_2.18</td>
+        <td align="left">nnet_7.3-18</td>
+    </tr>
+    <tr>
+        <td align="left">DescTools_0.99.47</td>
+        <td align="left">expss_0.11.4</td>
+    </tr> 
+    <tr>
+        <td align="left">maditr_0.8.3</td>
+        <td align="left">synthpop_1.8-0</td>
+    </tr>
+    <tr>
+        <td align="left">forcats_0.5.2</td>
+        <td align="left">stringr_1.4.1</td>
+    </tr> 
+    <tr>
+        <td align="left">dplyr_1.0.10</td>
+        <td align="left">purrr_0.3.5</td>
+    </tr>
+    <tr>
+        <td align="left">readr_2.1.3</td>
+        <td align="left">tidyr_1.2.1</td>
+    </tr> 
+    <tr>
+        <td align="left">tibble_3.1.8</td>
+        <td align="left">ggplot2_3.4.0 </td>
+    </tr>
+    <tr>
+        <td align="left">tidyverse_1.3.2</td>
+        <td align="left">rio_0.5.29</td>
+    </tr>  
+</table>         
