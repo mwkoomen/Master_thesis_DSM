@@ -7,7 +7,7 @@
 
 ### Code and guide for reproduction
 
-Data for this master thesis are not publically available. However, the code can be run by downloading the TREE2 scientific-use-files, available for download [here](https://www.swissubase.ch/en/catalogue/studies/12476/17413/datasets/1255/2026/overview). After downloading the data, add the data preparation function to your work directory: 
+The data needed to reproduce this master thesis are not publically available. However, the code can be run by downloading the TREE2 scientific-use-files, available for download [here](https://www.swissubase.ch/en/catalogue/studies/12476/17413/datasets/1255/2026/overview). After downloading the data, add the data preparation function to your work directory: 
 
 1. Function for data merging and preparation [here](data_tree_ext.R) (Rscript)
 
