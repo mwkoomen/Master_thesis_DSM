@@ -39,10 +39,10 @@ LC_NUMERIC=C
 LC_TIME=German_Switzerland.utf8    
 
 attached base packages: <br>
-
+| | |
 |:-------------|:-------------|:-------------|
-| stats |  graphics | grDevices utils  |
-| datasets |    methods   |   base |
+| stats        |  graphics    | grDevices utils  |
+| datasets     |    methods   |   base       |
 
 other attached packages:
  [1] arm_1.13-1        lme4_1.1-31      
