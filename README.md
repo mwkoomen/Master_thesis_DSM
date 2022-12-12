@@ -11,7 +11,7 @@ The data needed to reproduce this master thesis are not publically available. Ho
 
 1. Function for data merging and preparation [here](data_tree_ext.R) (Rscript)
 
-Next, two loops for finding the optimal variable visit sequence and synthesis modelling should be run consecutively (warnring, these loops are computatinally intensive and will likely run for multiple weeks, code to estimated runtime is included) 
+Next, two loops for finding the optimal variable visit sequence and synthesis modelling should be run consecutively (warning, these loops are computationally intensive and will likely run for multiple weeks, code to estimated runtime is included) 
 
 2. Loop to find optimal variable sequence [here](find_sequence.R) (Rscript)
 3. Loop to find optimal synthesis models [here](find_model.R) (Rscript)
