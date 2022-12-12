@@ -2,6 +2,7 @@
 
 # Main code to find best performing model per variable 
   #! Work directory needs to be set manually
+  # Code is computationally demanding, code to estimate runtime is provided 
 
 #load libraries ####
 library(rio)
