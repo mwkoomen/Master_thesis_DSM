@@ -22,7 +22,9 @@ After these loops are completed, the function to calculate the TCAP can be added
 Last, putting it all together, a pdf can be compiled by running the Rmarkdown file below:
 
 5. Code to compile pdf [here](master_thesis.Rmd) (Rmarkdown)
-
+<br>
+<br>
+***
 ### Info on the R-session used for compilation: 
 
 R version 4.2.1 (2022-06-23 ucrt) <br> 
