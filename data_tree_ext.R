@@ -1,7 +1,7 @@
 # Master thesis data prep ####
 
 #Main data preparation function
-  #!Workdirectory should be set
+  #! Workdirectory should be set manually
 
 # load libraries ####
 library(rio)
