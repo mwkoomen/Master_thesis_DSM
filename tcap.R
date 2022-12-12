@@ -1,6 +1,8 @@
 # TCAP function ####
 
 #Function to calculate the Targeted Correct Attribution Probability
+  # Should be saved in work directory
+  # Returns synthetic data set with TCAP score per row
 
 #load libraries ####
 library(rio)
