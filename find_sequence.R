@@ -1,6 +1,8 @@
 # Find Sequence 
 
-# Main code to find best performing sequence - Can only be run within the Uni Bern intranet
+# Main code to find best performing sequence 
+    #! Work directory should be set manually
+    # Code is computationaly demanding 
 
 #load libraries ####
 library(rio)
@@ -8,9 +10,12 @@ library(tidyverse)
 library(synthpop)
 library(gghighlight)
 
-#run data prep #### Can only be run on my local machine
-#source("H:/IPSDS/Master thesis/Data/data_tree_ext.R") 
-#obs <- import.tree()
+#set Workdirectory (set manually) 
+wd <- "xxx"
+
+#run data prep: ! needs data_tree_ext.R in Workdirectory
+source(paste0(wd,"/data_tree_ext.R")) 
+obs <- import.tree()
 
 #sequence search grid ####
 norm <- c(3,4,12)          #3 numeric variables with quasi-normal distribution 
@@ -103,5 +108,5 @@ for (s in 1:nrow(seq.grid)){
   )
   test.visit <- rbind(test.visit,x)
 }
-#setwd("H:/IPSDS/Master thesis/Data") Can only be run on local machine
-#save(test.visit, file="test_vseq_ext.RData")
+setwd(wd)
+save(test.visit, file="test_vseq_ext.RData")
