@@ -5,9 +5,16 @@
 - Main thesis text [here](Mitigating_panel_attrition_with_syndata.pdf) (pdf)
 
 ### Code and guide for reproduction
-1. Code for data prep [here](data_tree_ext.R) (Rscript)
+
+Data for this master thesis are not publically available. However, the code can be run by downloading the TREE2 scientific-use-files, available for download [here](https://www.swissubase.ch/en/catalogue/studies/12476/17413/datasets/1255/2026/overview). After downloading the data, add the data preperation function to your work directory: 
+
+1. Code for data prep. [here](data_tree_ext.R) (Rscript)
+
+Next, the loops for finding the optimal variable visit sequence and synthesis modelling should be run consecutively (warnring, these loops are computatinally intensive and will likely run for multiple weeks) 
+
 2. Loop to find optimal variable sequence [here](find_sequence.R) (Rscript)
 3. Loop to find optimal synthesis models [here](find_model.R) (Rscript)
+
 4. Function to calculate the Targeted Correct Attribution Probability [here](tcap.R) (Rscript)
 5. Code to compile pdf [here](master_thesis.Rmd) (Rmarkdown)
 
