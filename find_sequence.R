@@ -2,7 +2,7 @@
 
 # Main code to find best performing sequence 
     #! Work directory should be set manually
-    # Code is computationaly demanding 
+    # Code is computationally demanding 
 
 #load libraries ####
 library(rio)
