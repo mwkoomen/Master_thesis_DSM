@@ -32,15 +32,16 @@ Running under: Windows 10 x64 (build 19045)
 Matrix products: default
 
 locale:
-[1] LC_COLLATE=German_Switzerland.utf8 
-[2] LC_CTYPE=C                         
-[3] LC_MONETARY=German_Switzerland.utf8
-[4] LC_NUMERIC=C                       
-[5] LC_TIME=German_Switzerland.utf8    
+LC_COLLATE=German_Switzerland.utf8 
+LC_CTYPE=C                         
+LC_MONETARY=German_Switzerland.utf8
+LC_NUMERIC=C                       
+LC_TIME=German_Switzerland.utf8    
 
 attached base packages:
-[1] stats     graphics  grDevices utils    
-[5] datasets  methods   base     
+|:-------------|:-------------|:-------------|
+| stats |  graphics | grDevices utils  |
+| datasets |    methods   |   base |
 
 other attached packages:
  [1] arm_1.13-1        lme4_1.1-31      
