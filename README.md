@@ -39,7 +39,7 @@ LC_NUMERIC=C
 LC_TIME=German_Switzerland.utf8    
 
 attached base packages: <br>
-| Tables   |      Are      |  Cool |
+|    |           |   |
 |:-------------|:-------------|:-------------|
 | stats |  graphics | grDevices utils  |
 | datasets |    methods   |   base |
