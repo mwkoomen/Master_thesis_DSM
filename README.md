@@ -25,6 +25,7 @@ Last, putting it all together, a pdf can be compiled by running the Rmarkdown fi
 <br>
 <br>
 ***
+<br>
 ### Info on the R-session used for compilation: 
 
 R version 4.2.1 (2022-06-23 ucrt) <br> 
