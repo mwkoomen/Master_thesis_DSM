@@ -1,0 +1,727 @@
+---
+title: "Mitigating panel attrition with synthetic data"
+subtitle: "Statistical disclosure control for linked panel survey and register data"
+author:
+- "Maarten Koomen"
+- "Master thesis in Applied Data Science and Measurement"
+- "Supervisor: Jörg Drechsler" 
+- "Examinator: Stefan Bender"
+- "Link to [Github repository](https://github.com/mwkoomen/Master_thesis_DSM) with R code."
+date: "`r format(Sys.time(), '%d %m, %Y')`"
+output:
+  pdf_document:
+    highlight: espresso
+    toc: no
+    number_sections: true
+header-includes:
+    - \usepackage{setspace}\doublespacing
+bibliography: references.bib
+link-citations: yes
+linkcolor: blue
+sansfont: Times New Roman
+fontsize: 12pt 
+geometry: "left=3cm,right=3cm,top=2.5cm,bottom=2.5cm"
+---
+\thispagestyle{empty}
+\newpage
+\thispagestyle{empty}
+```{=latex}
+\setcounter{tocdepth}{4}
+\tableofcontents
+```
+\newpage
+```{r libraries, include=F}
+library(rio)
+library(tidyverse)
+library(synthpop)
+library(expss)
+library(DescTools)
+library(nnet)
+library(rmarkdown)
+library(gghighlight)
+library(sjlabelled)
+library(gridExtra)
+library(tidytext)
+library(arm)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F)
+knitr::opts_chunk$set(fig.align = 'left')
+```
+
+```{r load data, include=F}
+rm(list=ls())
+source("H:/IPSDS/Master thesis/Data/data_tree_ext.R")
+obs <- import.tree()
+```
+
+# Introduction
+Attrition can be a significant problem for panel studies. Selectivity in who chooses to participate in a panel survey diminishes the representativeness of the survey data and, by extension, the general validity of statistical inferences. By combining panel survey and register data it is generally possible to fill in some of the gaps created by the explicit or implicit (e.g. nonresponse) refusal to participate in panel waves. Publishing such linked data without explicit consent would be a serious infringement on the respondents' privacy and a violation of most conventional data protection regulations. However, generating synthetic data based on linked data might offer an opportunity to make such sensitive information accessible for research, without infringing on the respondents' privacy. \par
+
+In this paper, I will assess the feasibility of generating synthetic data from the Swiss education panel survey (TREE) linked with registry spell data on educational enrollment (LABB) from the Swiss Federal Statistics Office (FSO). Merging these two data sets combines the feature richness of survey data with the (theoretical) full coverage of the target population in the registry data. The goal is to combine these two data sources and generate synthetic data which are analytically comparable to the observed data without an unreasonable increase in the likelihood of disclosing any sensitive information where these data to be publicly disseminated. \par
+
+I will start by giving a short overview of the history and practical applications of data synthesis as a method of statistical disclosure control for the dissemination of micro-data. In Section 2, I will discuss some metrics commonly used to measure the data utility and disclosure risk of synthetic data, and select some of them to fine-tune and assess the quality of the synthetic data. In Section 3, I will briefly describe the data collection process and main characteristics of both sets of observed data; the TREE panel survey and the LABB registry data. Finally, I will compare different synthesis configurations and use the data utility and disclosure risk metrics discussed in Section 2 to judge the performance of the final synthesis model. \par
+
+# Statistical disclosure control with synthetic data 
+Releasing micro-data to the public carries with it a, usually unknown, risk of information disclosure. Such a risk could entail that an attacker, i.e. someone intended on disclosing information, can determine that (i), a specific individual was in the original sample or (ii), that specific information can with high probability be linked to individuals. Increasingly inexpensive computing power has led to a greater demand by researchers for direct access to micro-data. This has created a need for statistical agencies and other data producers to find solutions to data dissemination that allow researchers to access sensitive micro-data whilst limiting the potential for privacy breaches. Not all such solutions focus on releasing micro-data to the public. Data centers can also set up on-site or online infrastructures where researchers are allowed to access the sensitive micro-data. In on-site infrastructures, researchers are typically allowed to analyze the data in a controlled environment and take with them only the aggregated results after they are checked for potential disclosure issues. This method is flexible but can be rather burdensome on both the data center and the researchers. The data center needs to provide isolated machines for the researchers and manually check any outputs they wish to take with them. In addition, the researchers have to physically travel to the data center, making any later discovered mistakes or additional need for analysis fairly costly. Online infrastructures give easier access to researchers and are potentially less costly for institutions. However, controlling the level of access and a priori defining how detailed output can be is challenging as it is difficult to assess how they affect the risk of disclosure. \par 
+
+An alternative to these solutions is releasing scientific-use-files that have been modified in some way by the data disseminator. Methods of modification depend on the type of data but they have broadly focused on information reduction, where information that poses a disclosure risk is suppressed in some way (e.g. top coding, rounding, and global re-coding), and data perturbation, where values are generally altered to improve data confidentiality (e.g. value swapping, noise addition, and data synthesis). A downside of many of these methods is that they often require specific knowledge of the modification process to properly analyze the altered data. Synthetic data as a method of statistical disclosure control offer a promising alternative because the data can be analysed by using relatively straightforward methods. \par
+
+## Synthetic data: synopsis of methodology and practical applications
+The idea of data synthesis as an approach to statistical disclosure control was first proposed by Rubin [-@rubin1993] and Little [-@little1993]. These early contributions focused on using multiple imputation techniques to generate multiple synthetic records for non-observed units or replacing sensitive records with synthetic ones. In the computer science literature, the idea can be traced back to Liew et al. [-@liew1985] who discuss using a very similar approach as a method of data distortion. After these initial proposals, it took another ten years before the methodology was fully formalized. \par 
+
+The general idea behind generating synthetic data is that models are fitted to the original, observed data, then, random draws from the fitted models are used to replace the original data. Broadly speaking, there are two approaches; full- and partial data synthesis. As the name suggests, in fully synthetic data, all records and values are fully synthetic. In partial synthetic data, only some sensitive records and/or values are replaced with synthetic data, meaning some original records or values remain in the synthetic data. In theory, fully synthetic data should offer better privacy protection because they contain no (directly) observed information. The flip-side is that, compared to partial synthesis, the analytic validity of fully synthetic data depends more heavily on the specification of the synthesis models. \par
+
+Raghunathan et al. [-@raghunathan2003] and Reiter [-@reiter2003] formulated the rules for achieving valid inferences from fully-, and partially synthetic data, respectively. These rules are a variant of the combining rules for multiple imputation techniques for nonresponse, differing slightly for full- and partial synthesis. Raab et al. [-@raab2016] further expanded these combining rules by adding a method to achieve valid inferences in cases where only one synthetic data set is generated. This can be helpful in cases where the data synthesis is computationally intensive (for example when synthesizing data for large samples of observed data) or if data publishers fear that releasing multiple synthetic data sets generates an unacceptable additive risk of disclosure. \par
+
+In the social sciences, early practical adoptions of synthetic data have focused primarily on fitting parametric models. Over the years, these methods have been expanded by including modelling approaches based on machine learning (ML) algorithms and models that can account for the complex sampling structures of modern survey data. ML approaches are especially promising where higher order relationships between a large number of variables need to be modeled in the synthesis process. For example, parametric models that have dozens of categorical predictors might not converge and suffer from issues of multicollinearity or perfect prediction. ML approaches can be helpful in these cases as they are not affected by these problems and offer an automated way of modelling any relevant higher order relationships in the original data. A suit of different ML techniques have been tested as synthesizers over the years; Classification and Regression Trees (CART) [Reiter -@reiter2005], Random Forest [Caiola and Reiter -@caiola2010], Support Vector Machines [Drechsler -@drechsler2010b], and Generative Adversarial Networks (GANs) [Choi et al. -@choi2017; Park et al. -@park2018]. Comparing some of these ML methods, Drechsler and Reiter [-@drechsler2011] and Little et al. [-@little2021] show that CART models generally outperform some of the newer ML algorithms when used as a data synthesizer. \par
+
+In addition to selecting a parametric or ML data synthesizer, another choice in the data synthesis process is the use of either sequential or joint modelling. Joint modelling aims to directly specify the joint distribution of the original data and generate synthetic data by drawing values from this joint distribution [see Schafer -@schafer1997 for a detailed discussion on joint modelling for the multivariate normal- and log-linear model]. Valid synthetic data can be easily generated if the joint distribution of the original data is correctly specified. However, given the complexity of real-world data, it is often difficult to correctly identify the joint distribution. This is especially true if the data consist of both continuous and categorical variables, a common characteristic of social science micro-data. An alternative to joint modelling is synthesizing variables in sequence where each variable is synthesized by using as predictors only those variables that have already been synthesized previously, plus, in the case of partial synthesis, any variables that remain unchanged in the final data set. The assumption of sequential modelling is that the underlying joint distribution of a particular set of variables can be represented by the product of their conditional univariate distributions. This approach is very flexible since it allows each variable to be modeled separately, given the option of using either parametric or ML methods. \par
+
+The earliest real-world application of synthetic data is from 1997, when the U.S. Federal Reserve Board decided to synthesize certain information at high risk of disclosure in the Survey of Consumer Finances [Kennickell -@kennickell1997]. An early example of the usefulness of synthetic data in the disclosure control of linked data is given by Abowd and Woodcock [-@abowd2001], who generate a synthetic data based on data from the French National Institute of Statistics and Economic Studies (INSEE). Their goal was primarily to reduce the disclosure risks when linking data from several different official registers. To date, the most complex and extensive linked synthetic data has been released by the U.S. Census Bureau (Abowd et al. [-@abowd2006]; Benedetto et al. [-@benedetto2018]). This data contains synthesized records based on linked data from the Survey of Income Program Participation (SIPP), the Social Security Administration, and the Internal Revenue Service. This longitudinal data contains over 600 variables, almost all of which have been synthesized. In Europe, several data centers have started to produce similar statistical products. The German Institute for Employment Research (IAB) released a partial synthetic data in 2011 that was based on one wave of its Establishment Panel [Drechsler -@drechsler2012]. The Scottish Longitudinal Study (SLS) has used a tailor-made synthetic data approach to grant access to census data linked with sensitive records from health and death registers (Nowok et al. [-@nowok2017]). In 2015, Eurostat published a synthetic version of the EU Statistics on Income and Living Conditions (EU-SILC) [de Wolf -@deWolf2015]. The synthetic EU-SILC data are not designed to lead to valid inferences, instead, they facilitate a way for researchers to access sensitive micro-data and prepare their analysis while they request full access to the original data. \par 
+
+## Assessing the quality of synthetic data 
+Generating and publishing synthetic data is only useful if both the data disseminator and the research community can be equally convinced of its utility as a proxy for the original data, and of the effectiveness of the synthesis process in reducing the risk of disclosure. These two characteristics of synthetic data are logically opposed, i.e. synthetic data that can in no way be discriminated from its original base would offer zero additional protection against re-identification of individuals or the disclosure of sensitive information. A broad range of formal tests for both the utility and disclosure risk of synthetic data have been proposed. In the following two subsections, I will introduce some of the most prevalent of these metrics and select three that I will use in the remainder of the paper. \par
+
+### Measuring data utility 
+Data utility measures can roughly be grouped into three broad categories. First, synthetic data is usually checked on its general consistency and distribution. These checks, which can be labelled as fit-for-purpose measurements, are aimed towards comparing marginal or conditional distributions and checking whether values in the synthetic records are in themselves plausible (e.g. no negative number of children) and conditionally plausible (e.g. no unemployment with full-time job). These checks are generally not designed to illustrate the utility of the data; synthetic data with a one-to-one marginal distribution to the original data might still lead to invalid inferences in more complex multivariate analyses. However, they are a first check to see if there are underlying issues with the synthesis models. For this paper, I will limit these checks to comparing the marginal distributions of the original and synthetic variables and checking for implausible values in the synthetic data. \par
+
+A second approach, often classified as global or general utility metrics, aims to test the utility of synthetic data by making general, formal, comparisons between the synthetic and original data. Many global measures utilize some distance metric to compare the synthetic and original data, such as the Kullback-Lieber divergence [Karr et al. -@karr2006] or the Hellinger distance [Gomatam and Karr -@gomatam2003]. Another technique that has gained in popularity is based on the literature of propensity score matching [Rosenbaum and Rubin -@rosenbaum1983]. In this approach, the synthetic and original data are stacked into a single file, then, the probability for each row being a synthetic row is calculated. The closer the synthetic data are to the original data, the harder it would be for the propensity model to distinguish between synthetic and original records. Several metrics can be used to evaluate the difference between propensity scores, such as the Kolmogorov-Smirnov distance [Bowen et al. -@bowen2021] or the propensity score mean squared error ($pMSE$) [Woo et al. -@woo2009; Snoke et al. -@snoke2017]. The $pMSE$ has become a particular popular global utility measure in recent years, it is defined as: \par    
+
+\hfil \begin{equation}pMSE=\frac{1}{N}\sum_{i=1}^{N}[\hat{p}_{i}-c]^2 \end{equation} \par
+
+Where $\hat{p_i}$ is the estimated propensity for record $i$ in the stacked synthetic and original data ($N = n_{org} + n_{syn}$) to be part of $n_{syn}$, with $c=n_{syn}/N$. Smaller $pMSE$ values indicate higher analytic validity for the synthetic data as it is harder for a propensity model to distinguish between observed and synthetic records in the stacked data set. A downside to this approach is that the $pMSE$ generally increases with the number of predictors in the synthesis model. To overcome this, @snoke2017 define a standardized $pMSE$ by subtracting the $pMSE$ with its expected value under a null model (a correctly specified synthesis) divided by its standard deviation. The null $pMSE$ is distributed as a multiple of a chi-squared distribution with $(k-1)$ degrees of freedom with the expected value and  standard deviation defined as: \par 
+
+\hfil \begin{equation}E[pMSE]=(k-1)(\frac{n_{org}}{N})^2(\frac{n_{syn}}{N})/N=(k-1)(1-c)^2c/N\end{equation} \par
+
+\hfil \begin{equation}StDev(pMSE)=\sqrt{2(k-1)}(\frac{n_{org}}{N})^2(\frac{n_{syn}}{N})/N=\sqrt{2(k-1)}(1-c)^2c/N\end{equation} \par
+
+As a global utility measure, the standardized propensity score mean squared error ($S\_pMSE$) offers a clear interpretation and straightforward comparison between different synthesis models. For the remainder of the paper, I will use the $S\_pMSE$ to fine-tune the synthesis parameters in Section 4. One shortcoming of the propensity score measure is that it is dependent on the model specified to calculate the propensity scores. A common traditional approach is to fit a Logit model that uses all variables in the data as estimators. I will additionally look at CART models to calculate the propensity scores, both as robustness check and because CART models can often be more efficient in automatically detecting relevant interactions and high order terms. \par
+
+The advantage of global utility measures is that ther is no need to know a priori how synthetic data will be analyzed. However, there is no guarantee that synthetic data with a high global utility are in fact suitable for any one specific analysis. A third and last class of measurements therefore focuses on outcome-specific utility metrics, where specific analyses on the synthetic and original data are run and compared in parallel. Point estimates (means, regression coefficients) obtained from the synthetic and original data can be plotted against each other. If the synthetic data have a high outcome utility, these point estimates should cluster around a diagonal with a gradient of one. However, this approach does not account for any differences caused by the inherent uncertainty of estimation. In some situations, deviating point estimates obtained from the synthetic and original data could simply be an artifact of a large sampling error. A widely used metric that can take this estimation uncertainty into account is based on the confidence intervals (CI) overlaps of point estimates [Karr et al. -@karr2006]. The CI overlap $J$ is defined as the average relative overlap for point estimate $k$ as: \par
+
+\hfil \begin{equation}J_{k}=\frac{1}{2}[\frac{U_{over,k}-L_{over,k}}{U_{org,k}-L_{org,k}}+\frac{U_{over,k}-L_{over,k}}{U_{syn,k}-L_{syn,k}}]\end{equation} \par
+
+Where $U_{org}$, $L_{org}$ and $U_{syn}$, $L_{syn}$ are the upper- and lower bounds of the CI on the original and the synthetic data, respectively, and $U_{over}$ and $L_{over}$ are the upper- and lower bounds of the overlapping sections of the CI estimates on the original and synthetic. In Section 4.3, I will use this method to asses the specific utility of the generated synthetic data sets. \par
+
+### Measuring disclosure risk
+There is a general distinction between measuring the disclosure risk of full- or partial synthetic data. With partial synthesis, at least some records or values remain unchanged and there is usually a one-to-one relation between the synthetic and original data. With full synthesis, this one-to-one relation does not exist and the original and synthetic data can be of different sizes. However, even though no original information remains in a fully synthetic data set, this does not mean that it cannot be used to learn about and disclose information contained in the original data. For example, Stadler et al. [-@stadler2022] show how prior knowledge about the true values of some target records can be used in combination with information on the synthesis process to determine whether specific units are contained in the original data. Another approach proposed by Taub and Elliot [-@taub2019] uses a measure that directly matches cases in the original and synthetic data based on a defined set of key variables, and then calculates the disclosure risk of specific information in target variables. Specifically, the authors calculate a *Targeted Correct Attribution Probability* (TCAP) by finding records in the synthetic data for which a specific combination of *key* variables can uniquely identify a set of *target* variables, and then calculating the probability that those records can disclose the true value of the *target* variables in the original data. Let $d_o$ be the original data and $K_o$ and $T_o$ vectors for the key and target variables so that: \par  
+
+\hfil \begin{equation} d_o=\{K_o,T_o\} \end{equation} \par
+
+With the synthetic data $d_s$ being: \par
+
+\hfil \begin{equation} d_s=\{K_s,T_s\} \end{equation} \par
+
+First, the *Within Equivalence Class Attribution Probability* (WEAP) is calculated: \par
+
+\hfil \begin{equation}WEAP_{s,j}=Pr(T_{s,j}|K_{s,j})=\frac{\sum_{i=1}^{n}[T_{s,i}=T_{s,j},K_{s,i}=K_{s,j}]}{\sum_{i=1}^{n}[K_{s,i}=K_{s,j}]}\end{equation} \par
+
+The WEAP score for record $j$ is the probability of the target variables conditional on the key variables. The square brackets are Iverson brackets (1 if condition is true, 0 otherwise) and $n$ is the number of records in the synthetic data. The aim is to retain records with a high WEAP score since those synthetic records would be most helpful in trying to guess the true values of the target variables in the original data. For rows with a high WEAP score (for example WEAP=1), the TCAP for record $j$ in the synthetic data is given by: \par
+
+\hfil \begin{equation}TCAP_{s,j}=Pr(T_{s,j}|K_{s,j})_{o}=\frac{\sum_{i=1}^{n}[T_{o,i}=T_{s,j},K_{o,i}=K_{s,j}]}{\sum_{i=1}^{n}[K_{o,i}=K_{s,j}]}\end{equation} \par
+
+For synthetic records $j$ that have no counterpart in the original data $d_o$ matched on the key variables, the denominator in Equation 8 would be zero and the TCAP would be undefined. For records that do match, the TCAP  score lies somewhere between 0 and 1, where a score of 0 would mean there is no disclosure risk for these records and a value of 1 would indicate that, for records with a high WEAP score, there is a considerable risk to disclose the true values of the target variables if the synthetic data were to be made public. The TCAP measure seems highly appropriate for assessing the added disclosure risk of linked data and I will use it in Section 4.4 to assess the disclosure risk of the synthesized data. \par 
+
+# Observed data
+The main goal of this paper is to specify a synthesis model that can be used to generate scientific-use-files from data that would otherwise be too sensitive to be published. Specifically, I am interested in linking survey data from the Swiss education panel (TREE) with register data on educational enrollment (LABB) from the Swiss Federal Statistical Office. The main idea is that this approach could facilitate the creation of a data set with the full TREE baseline sample of +20'000 participants who can be followed throughout their educational careers. This merger would reap the benefits of having data that is rich in features (TREE) and data that has a high degree of coverage (LABB) of the target population. In the next two subsections, I will briefly describe some important design features of both data sources. \par
+
+## The TREE and LABB data
+The Transitions from Education to Employment (TREE) panel is a multi-cohort, multidisciplinary longitudinal large scale survey providing high-quality data on educational and occupational pathways in Switzerland. The target population are school leavers who are first surveyed at the end of compulsory school at the age of approximately 15 to 16 (see @tree2021 for more details). For the purpose of this paper, I will focus on the second TREE cohort who left compulsory school and were first surveyed in 2016. The baseline survey wave for the second TREE cohort contains detailed student and parental background characteristics and measurements of cognitive skills. The TREE survey was part of the Assessment of the Attainment of Educational Standards (AES), a national monitoring scheme designed to capture student skills in mathematics at the end of lower-secondary education in Switzerland. In 2016, the AES was designed as a compulsory, cross-sectional in-school assessment, carried out under the responsibility of the Swiss Conference of Cantonal Ministers of Education (EDK/CDIP). Because it was compulsory, the response rate of the baseline survey was close to a hundred percent. The TREE survey gathered explicit consent from the AES respondents to link their data with any further collected longitudinal information (with an overwhelming majority (95%) giving their approval). Subsequent TREE survey waves continue to collect data on education and labor market trajectories, contextualized by a rich set of complementary information. An downside of these subsequent waves, at least in terms of responses, is that participation is voluntary and response rates for the first two baseline surveys were around 85 and 75 percent, respectively. \par
+
+The *Längsschnittanalysen im Bildungsbereich* (LABB) data are micro-data on education trajectories. Started in 2014, the LABB combines data from several FSO registers, primarily from several education monitors (*Statistik der Lernenden* (SdL), *Statistiken der Abschlüsse* (SBA), *Statistik der beruflichen Grundbildung* (SBG), and the *Schweizerisches Hochschulinformationssystem* (SHIS)), in addition to data from the population register (*Statistik der Bevölkerung und der Haushalte* (STATPOP)) and the Swiss micro-census (*Strukturerhebung* (SE)). Similar to the TREE data, the LABB micro-data can be used to analyze transitions into post-compulsory, upper-secondary education. Unlike the TREE data, however, the LABB micro-data is limited to educational programs that last at least one full-time semester. It does not contain information on some intermediate educational options in the post-compulsory transition period like the Motivation Semester or the Au-pair or Foreign Language Stays (for more detail see: FSO [-@bfs2021;-@bfs2022]). For all remaining formal educational programs, the LABB data provide population-level data that does not suffer from nonresponse biases that usually plague voluntary-based surveys like TREE. \par  
+
+```{r bias, eval=F}
+cat <- c("No / other education",
+        "VET (2-3 yrs)",
+        "VET (4 yrs)",
+        "Specialised school",
+        "Baccalaureate",
+        "Survey nonresponse")
+d <- c(rep("TREE panel data [weighted]",6),
+       rep("LABB register data",6)
+       )
+ nbias <- data.frame(
+   Education = factor(c(rep(cat,2)),
+                      levels = c(
+                        "Survey nonresponse",
+                        "No / other education",
+                        "Specialised school",
+                        "VET (2-3 yrs)",
+                        "VET (4 yrs)",
+                        "Baccalaureate"
+                      )),
+   Data = factor(d,levels = c(
+     "LABB register data",
+     "TREE panel data [weighted]"     
+     )
+  ),
+   Value = c(
+     16.3,29.3,13.6,5.3,30,5.4,
+     21.8,32.9,14.7,5.2,25.5,0
+  )
+ )
+b <- ggplot(nbias, aes(x=Education,y=Value, color=Data)) + 
+  geom_col(position = position_dodge(0.7),fill = NA,size = 2,width=0.5) + 
+  coord_flip() +
+  xlab("") +
+  ylab("Percent of sample/population") + 
+  theme(legend.position="top",
+        legend.title = element_blank(),
+        axis.title = element_text(size=10)) + 
+  scale_color_manual(values = c("LABB register data"="blue", "TREE panel data [weighted]"="red"))
+  #save
+    png(file="H:/IPSDS/Master thesis/Pictures/bias.png",width=800, height=600, res=150)
+    b
+    dev.off() 
+```
+
+```{r bias-fig, out.width="75%", fig.cap="2017 Enrollment of 2016 school-leaving cohort."}
+knitr::include_graphics("H:/IPSDS/Master thesis/Pictures/bias.png")
+```
+
+To illustrate how nonresponse impacts survey statistics in the TREE panel, Figure 1 shows the population and survey response percentages of educational enrollment in 2017 in the LABB register and TREE survey data, respectively. The TREE percentages are adjusted by their sampling design weights to represent population averages. In 2017, the first TREE survey wave had around five percent nonresponse. Among respondents, students that enroll into a baccalaureate-type of upper-secondary education (high-school, college, etc.) are over-represented. The LABB figures represent the true population enrollment distribution. In comparing both data sources, respondents in the TREE panel are biased towards students in higher academic tracks and under-represented by students in vocational- or other educational tracks. The LABB register data can be used to understand this bias and, ideally, to fill in some of the gaps in the TREE data. However, it would be unethical to published linked data that ignores the explicit or implicit refusal to panel participation. The aim of this paper is therefore to see if it would be feasible, both from a data validity and privacy standpoint, to create a set of synthetic data that could be used as a publicly available scientific-use-file. \par 
+
+## Variable selection: who accesses secondary education in Switzerland? 
+The TREE panel scientific-use-files contain hundreds of variables. Synthesizing all of these is firmly beyond the scope of this paper. As a feasibility study, I will limit myself to synthesizing a handful of variables that model the transition from lower-secondary to post-compulsory education in Switzerland. In the following sections I will therefore briefly introduce some relevant characteristics of the Swiss educational system and prior research findings into the determinants of educational outcomes. \par
+
+The Swiss educational landscape is federalized with each canton having a high level of autonomy in setting its own educational policies. The Swiss system is characterized by early tracking with relative high levels of differentiation and stratification. Tracking generally starts in lower-secondary education around age 12, in one of five distinctive tracks, with three differentiated by their academic requirements (basic, intermediate, or advanced academic requirements), plus two tracks with integrated or no tracking on academic ability [SKBF -@skbf2018]. Placing guidelines for lower-secondary tracks vary between cantons but they are most commonly based on prior scholastic performance measured by grades [Neuenschwander et al. -@neuenschwander2012]. \par
+
+The main differentiation at the upper-secondary level is between vocational education and training (VET) and general education, mainly typified by baccalaureate type schools that grant direct access to university. VET tracks can be completed with an additional vocational baccalaureate that also grants access to tertiary education at universities of applied science. For both VET and general upper-secondary education, admission to the more academically demanding tracks is mainly based on prior school track and performance measured by grades [Buchmann et al. -@buchmann2016]. In French- and Italian-speaking cantons there generally is a higher share of youths that enroll for general (i.e. non-VET) upper-secondary education compared to the German-speaking regions [SKBF -@skbf2018]. Scientific research into determinants of upper-secondary track placement have generally confirmed the importance of grades and early tracking [Baeriswyl et al. -@baeriswyl2006; Neuenschwander and Malti -@neuenschwander2009; Beck -@beck2014]. Compared to boys, girls are found to be slightly over-represented in  tracks with higher academic requirements, mostly because of better performances measured by grades, but also because they have higher achievement motivation [Glauser -@glauser2015]. Having a migration background increases the likelihood of attending a track with lower academic requirements, although there is considerable variation between different migrant origin groups [Beck -@beck2014; Glauser -@glauser2015]. Another common research finding is that there is a persistent influence of social background (e.g. parental socio-economic status or educational attainment) on upper-secondary track placement [Imdorf -@imdorf2005; Neuenschwander and Malti -@neuenschwander2009;Hupka-Brunner et al. -@hupka2010; Falter and Wendelspiess -@falter2011; Falter -@falter2012; Combet -@combet2013; Glauser -@glauser2015]. \par
+
+Drawing on these research findings, I select 15 variables for data synthesis from the linked TREE & LABB data. Table 1 lists those variables. First, I include personal background information on gender, language region, and immigration status. In the unweighted TREE data there is a slight bias towards female participation (54.5% females versus 45.5% males). The language region is coded as binary with the Italian language region being grouped together with French-speaking regions because of their low case counts (69.8% and 30.2% for German- and French/Italian language regions, respectively). Immigration status is a categorical variable with three levels; native Swiss (72.7%), second-generation immigrants (18.7%), and first-generation immigrants (9.3%). Second, I include information on the socio-economic background of respondents in the form of their parents' occupation, educational attainment, reading interest, educational aspirations (for the respondent), family affluence, and family wealth. Parental  occupation is measured by the highest parental ISEI-08 code [Ganzeboom -@ganzeboom2010]. Parental education is measured by a variable with two categories; parents with secondary education or lower (62.3%), and parents with at least one completed tertiary education (40.7%). Reading interest is measured by a composite variable based on the reading interest of both parents [Sacchi and Krebs-Oesch -@sacchi2021]. The parental aspirations for the respondents' educational careers is measured by a categorical variable with four levels; tertiary (34.5%), vocational education (50.6%), compulsory school (1.4%), and no opinion (13.5%). Family affluence and wealth are both composite variables scaled on household possessions and spending patterns (for more details see @kunter2002; @hartley2016; Hobza et al. [-@hobza2017]). On early tracking, ability, and performance, I include the attended type of lower-secondary school, average school grade in the regional language, maths, and science classes, and the score on the compulsory standardized maths test (AES) taken in 2016. Lower-secondary school type is measured by the level of academic requirements for the attended school with four categories; high requirements (29.1%), advanced requirements (39.1%), basic or low requirements (29.7%), and no or alternative differentiation based on skill level (2.1%). The average school grade is the mean of grades in maths, natural science courses, and marks in the language of AES test (e.g. mostly equivalent to primary regional language, either German, French, or Italian). The maths test score is a weighted likelihood estimate based on the individual AES maths test items (for details on test design and item scaling see @domenico2019). Lastly, respondents' idealistic educational aspiration and their embodied cultural capital are added. The idealistic educational aspiration is measured as a categorical variable with three levels; compulsory education (0.5%), upper-secondary (42.5%), or tertiary (57%). Embodied cultural capital is a composite variable scaled on questions on behavioral and verbal skills (for details see Hupka-Brunner [-@hupka2016]; @sacchi2021). \par    
+
+\textbf{Table 1: Selected synthesis variables}
+
+\setstretch{1.2}
+\scriptsize
+| \#| Variable| Measured in | Description           | Values         | 
+|:-|:----|:------|:----------------------------|:------------------|
+| 1   | sex     | 2016 | Gender of respondent                            | 1=Female, 2=Male | 
+| 2   | langreg | 2016 | Language region                                 | 1=German, 2=French/Italian | 
+| 3   | wlem    | 2016 | Maths test: weighted likelihood estimates (WLE) | \emph{Continuous} | 
+| 4   | marks   | 2016 | Mean school marks (test-language/maths/science) | \emph{Continuous} | 
+| 5   | ls_req  | 2016 | Lower-secondary school requirements             | 1=High, 2=Advanced, 3=Basic/Low, 4=No/non-assignable | 
+| 6   | hisei08 | 2016 | Highest parental occupational code (ISEI 08)    | \emph{Continuous} | 
+| 7   | pareduc | 2016 | Parents' highest educational attainment         | 0=Secondary or less, 1=Tertiary | 
+| 8   | immig   | 2016 | Immigration status                              | 1=Native, 2=Second generation, 3=First generation | 
+| 9   | wealth  | 2016 | Household possessions: family wealth            | \emph{Continuous} | 
+| 10  | joyreadp| 2016 | Parental reading interest                       | \emph{Continuous} | 
+| 11  | fas     | 2016 | Family affluence scale                          | \emph{Continuous} | 
+| 12  | inccap  | 2016 | Embodied cultural capital                       | \emph{Continuous} | 
+| 13  | aspmf   | 2016 | Parents' educational aspirations                | 1=Tertiary, 2=VET, \newline 3=Compulsory school, \newline 4=No opinion | 
+| 14  | aspideal| 2016 | Student's idealistic educational aspirations    | 0=Compulsory school, 1=Upper-secondary, 2=Tertiary | 
+| 15  |us_enroll| 2017 | Upper-secondary: education enrollment           | 1=No/other education, \newline 2=Bridge programme, \newline 3=Upper-sec VET, \newline 4=Upper-sec VET (Bac), \newline 5=Upper-sec Academic Bac. | 
+\setstretch{2}
+\normalsize
+Besides forming a theoretically cohesive set, the variables in Table 1 are also selected because they do not contain any dependencies that might be difficult to reproduce in the data synthesis process. In principle, for these specific variables, there is no configuration of values which is inherently impossible. This will make the data synthesis process much more straightforward because there is no need to explicitly model dependencies between sets of variables. For example, if age and marital status would have been included, the data synthesis should take into account that no person under 18 could be legally married under Swiss law. In addition, missing values that are present in the observed data, will not be replaced before data synthesis, meaning that they will effectively count as extra categories and will be present in the synthetic data  sets. This approach is useful if the goal of the synthetic data is to give researchers easy access to data that preserves the structure of the observed data as closely as possible, including information on missing patterns present in the original data. \par 
+
+# Data synthesis
+To generate the linked TREE and LABB synthetic data, I will focus on fitting CART and parametric models, ignoring some of newer ML algorithms. Further, I will only explore sequential synthesis, i.e. synthesizing each variable in sequence. An alternative to this approach would be to model the joined distribution of the entire data, something that is often prohibitive with real-world survey data, even with only a handful of variables. In the next two sections, I will explore the synthesis sequencing and the modelling of each variable individually to find parameters that generate synthetic data with high utility. For the data synthesis and most model evaluations, I will be using the R package *synthpop* [Nowok et al. -@nowok2016]. This package was created as part of the SYLLS (Synthetic Data Estimation for UK Longitudinal Studies) project. The goal was to create a toolkit that can be used to quickly create bespoke synthetic data from sensitive micro-data that fits the particular needs of individual researchers. The package offers a range of tools that are useful for both the creation and the analysis of synthetic data. It should be noted that the initial idea behind the *synthpop* package is that the synthetic data generated are meant to be used as test data for researchers to explore and test their models on. Code developed on synthetic data should ultimately be run on the original data to verify results. The *synthpop* package is flexible, supporting the use of a range of parametric models and ML algorithms. In addition, the *synthpop* package can handle missing data in categorical and continuous variables. For missing values in categorical variables, this process is relatively straightforward since they are simply regarded as separate categories in the imputation process. For continuous variables, this process is a little more involved. First, an auxiliary categorical variable is created containing all parallel missing categories. Values in this auxiliary variable are synthesized by either a polytomous or CART model. The remaining, non-missing, values are fitted separately and then both these variables are used in the final synthesis and as a predictor for the synthesis of remaining variables. \par 
+
+## Sequencing
+A first step in finding a well-performing synthesis model for our observed data is to consider the order in which our variables are synthesized, which can have a significant impact on the utility of the synthetic data. A brute-force method for finding the optimal sequence of data synthesis is computationally prohibitive for data sets with even a handful of variables. For $n$ variables a total of $n!$ synthesis sequences have to be compared. According to @drechsler2011, it can be computationally beneficial to place categorical variables at the end of the synthesis sequence, especially if they have many categories. Sub-setting numerical and categorical variables in the synthesis sequencing can significantly reduce the search grid for a brute-force approach. In addition, variables that follow a normal or binomial distribution would be easier to synthesize earlier in the sequence because, even with few predictors in the synthesis model, fairly accurate synthesis can be achieved by simply taking random draws from the normal or binomial distribution. \par
+
+```{r qqplot, eval=F}
+png(file="H:/IPSDS/Master thesis/Pictures/qq.png",width=900, height=400, res=150)
+par(mfrow=c(1,3))
+qqnorm(obs$wlem, pch = 1, frame = FALSE, main = "Maths test (wlem)",xlab="",cex.main=0.9)
+qqline(obs$wlem, col = "steelblue", lwd = 2)
+qqnorm(obs$marks, pch = 1, frame = FALSE, main = "Average grades (marks)", ylab="",cex.main=0.9)
+qqline(obs$marks, col = "steelblue", lwd = 2)
+qqnorm(obs$inccap, pch = 1, frame = FALSE, main = "Cultural capital (inccap)", xlab="",ylab="",cex.main=0.9)
+qqline(obs$inccap, col = "steelblue", lwd = 2)
+dev.off() 
+```
+
+```{r qqfig,out.height="60%",fig.align="center",fig.cap="Normal Q-Q Plot."}
+knitr::include_graphics("H:/IPSDS/Master thesis/Pictures/qq.png")
+```
+
+All numeric variables in the observed data are composite variables that are based on sets of underlying categorical variables. In general, these variables are approximately normally distributed with some degree of variability. The variables *wlem*, *marks*, and *inccap* have distributions that are closest to normal. Figure 2 shows the normal quantile plots for these variables. Of these three, *wlem* is closest to having a normal distribution since the observed values lay close to the blue diagonal line that represent the expected values under normality. The variables *marks* and *inccap* are only quasi-normal in that their distributions have fat tails or that they are clustered around certain values. I group these three variables together under $n_{norm}$. The remaining numeric variables; *hisei08*, *wealth*, *joyreadp*, *fas* follow distributions that depart even furhter from a normal distribution with more skewness or clustering. I group these separately under $n_{num}$. The variables *sex*, *langreg*, and *pareduc* follow relatively symmetric binomial distributions and are grouped together under $n_{bin}$. Lastly, I create two separate groups for categorical variables with three levels ($n_{cat3}$) and one for categorical variables with four or more levels ($n_{cat4}$). This reduces the sequencing search space from $n!$ to $\prod(n_{norm}!,n_{bin}!,n_{num}!,n_{cat3}!,n_{cat4}!)$, or from 1.3 trillion combinations to $\prod(3!,3!,4!,2!,3!)$, a more manageable 10,368 combinations of synthesis visit sequences. \par
+
+```{r vseq, eval=F}
+#plot sequence grid check (run find_sequence.R first)
+setwd("H:/IPSDS/Master thesis/Data")
+load("test_vseq_ext.RData")
+ test.visit <- test.visit %>% mutate(mean_pMSE = (S_pMSE.cc+S_pMSE.cl+S_pMSE.pc+S_pMSE.pl)/4)
+ test.visit <- test.visit %>% mutate(mean_pMSE.c = (S_pMSE.cc+S_pMSE.pc)/2)
+ test.visit <- test.visit %>% mutate(mean_pMSE.l = (S_pMSE.cl+S_pMSE.pl)/2)
+ test.visit <- test.visit %>% mutate(f_pMSE.l = case_when(
+   mean_pMSE.l < 1 ~ "1: pMSE < 1", 
+   mean_pMSE.l >= 1 & mean_pMSE.l <= 1.5 ~ "2: 1 < pMSE < 1.5",
+   mean_pMSE.l > 1.5 & mean_pMSE.l <= 2 ~ "3: 1.5 < pMSE < 2",
+   mean_pMSE.l > 2 & mean_pMSE.l <= 2.5 ~ "4: 2 < pMSE < 2.5",
+   mean_pMSE.l > 2.5 & mean_pMSE.l < 3 ~ "5: 2.5 < pMSE < 3",
+   mean_pMSE.l > 3  ~ "6: pMSE > 3" 
+ ))
+ p <- 
+   ggplot(test.visit, aes(x=S_pMSE.cc, y=S_pMSE.pc,shape=factor(f_pMSE.l))) +
+   geom_point() +
+   ylim(0.5,6) +
+   xlim(0.5,3) +
+   ggtitle(label="") +
+   ylab("CART (S_pMSE) + Parametric (Synthesis)") +
+   xlab("CART (S_pMSE) + CART (Synthesis)") +
+   guides(shape=guide_legend(title="Average S_pMSE (Logit)")) +
+   gghighlight(mean_pMSE < 1.39, label_key = Sequence, label_params = list(size = 2)) 
+  #save
+    png(file="H:/IPSDS/Master thesis/Pictures/vseq3.png",width=1200, height=800, res=150)
+    p
+    dev.off()
+```
+
+```{r vseq.fig, out.width="95%", fig.cap="Propensity mean-squared error per synthesis visit sequence."}
+knitr::include_graphics("H:/IPSDS/Master thesis/Pictures/vseq3.png")
+```
+
+To find optimal synthesis sequences, I calculate and compare the standardized propensity mean-squared error ($S\_pMSE$). For each synthesis sequence, I construct two synthetic data sets with *synthpop*, one using CART and one using parametric models for data synthesis. For each variable, the parametric synthesis models use all other, previously synthesized variables as predictors with no interactions or higher order terms. To compare the validity of the synthesis, I calculate the $S\_pMSE$ using both CART and Logit propensity score models. Figure 3 plots the $S\_pMSE$ for each synthesis sequence. The axes show the $S\_pMSE$ calculated with CART propensity score models for both sets of synthetic data, one generated by CART models, and one by parametric models. To make sure that the low $S\_pMSE$ scores calculated by the CART propensity score models are robust, I also calculate the average $S\_pMSE$ by using a Logit propensity score model. The six points highlighted in Figure 3 have an average $S\_pMSE$ smaller than 1.5 (as calculated by both the CART and Logit propensity score models). I will use these six synthesis sequences to further fine-tune the synthesis models for each individual variable in the following section. The numbers in these sequences correspond to the order of the variable list in Table 1. \par
+\newpage
+
+## Modelling
+For each of the six best variable visit sequences, Figure 4 plots the $S\_pMSE$ calculated with CART models per variable for both the CART and parametric data syntheses. Highlighted are sequences and models where the $S\_pMSE$ is below 0.8. \par
+
+```{r model.per, eval=F}
+m <- 1
+set.seed(6541)
+vseq <- list(
+  c(12, 3, 4, 2, 7, 1, 9, 6, 10, 11, 14, 8, 15, 13, 5),#1
+  c(12, 3, 4, 2, 7, 1, 6, 11, 10, 9, 14, 8, 13, 15, 5),#2
+  c(12, 4, 3, 7, 1, 2, 10, 6, 11, 9, 14, 8, 13, 15, 5),#3
+  c(4, 12, 3, 7, 1, 2, 10, 11, 6, 9, 8, 14, 15, 5, 13),#4
+  c(4, 12, 3, 7, 1, 2, 6, 10, 11, 9, 8, 14, 15, 5, 13),#5
+  c(4, 12, 3, 1, 7, 2, 9, 10, 11, 6, 8, 14, 5, 13, 15) #6
+  )
+c <- 0
+for (v in c(1,2,5,7,8,13,14,15)){
+  obs[v] <- as.factor(obs[,v])
+}
+rm(v)
+for (v in vseq){
+  c <- c+1
+  syn.cart <- paste0("syn_cart",c)
+  syn.par <- paste0("syn_par",c)
+  assign(syn.cart, syn(obs,m=m,method="cart",visit.sequence=v))
+  assign(syn.par, syn(obs,m=m,method="parametric",visit.sequence=v))
+}  
+varlist <- factor(c(
+  "sex","langreg","wlem","marks","ls_req","hisei08","pareduc","immig",
+  "wealth","joyreadp","fas","inccap","aspmf","aspideal","us_enroll"),
+  levels = c("sex","langreg","wlem","marks","ls_req","hisei08","pareduc","immig",
+  "wealth","joyreadp","fas","inccap","aspmf","aspideal","us_enroll"),ordered=T)
+comp_tab <- data.frame(
+  var=rep(varlist,12),
+  visit.seq=c(rep(1,30),rep(2,30),rep(3,30),rep(4,30),rep(5,30),rep(6,30)),
+  syn.method=rep(c(rep("CART",15),rep("Parametric",15)),6),
+  S_pMSE = c(
+    compare.synds(syn_cart1,obs)$tab.utility[,2],
+    compare.synds(syn_par1,obs)$tab.utility[,2],
+    compare.synds(syn_cart2,obs)$tab.utility[,2],
+    compare.synds(syn_par2,obs)$tab.utility[,2],
+    compare.synds(syn_cart3,obs)$tab.utility[,2],
+    compare.synds(syn_par3,obs)$tab.utility[,2],
+    compare.synds(syn_cart4,obs)$tab.utility[,2],
+    compare.synds(syn_par4,obs)$tab.utility[,2],
+    compare.synds(syn_cart5,obs)$tab.utility[,2],
+    compare.synds(syn_par5,obs)$tab.utility[,2],
+    compare.synds(syn_cart6,obs)$tab.utility[,2],
+    compare.synds(syn_par6,obs)$tab.utility[,2]
+  ))
+u <- comp_tab %>% 
+  ggplot(aes(x=reorder_within(factor(visit.seq),S_pMSE,list(var,syn.method)), y=S_pMSE, fill=syn.method))+
+  geom_col(width=0.8, position = "dodge") + 
+  coord_flip() + 
+  xlab("Visit sequence") +
+  ylab("S_pMSE") + 
+  guides(fill=guide_legend(title="Synthesis Method")) +
+  theme(axis.text=element_text(size=8),
+        legend.position="top",
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.title = element_text(size=9),
+        strip.text.x = element_text(size=9)
+        ) +  
+  scale_x_reordered() + 
+  facet_wrap(~ var, scales = "free",nrow=3,ncol=5) + 
+  gghighlight(S_pMSE < 0.8, use_group_by = F, calculate_per_facet = T, unhighlighted_params = list(fill = NULL, alpha = 0.3))
+png(file="H:/IPSDS/Master thesis/Pictures/synmeth2.png",width=1400, height=1000, res=150)
+u
+dev.off()
+```
+
+```{r model.fig, out.width="95%", fig.cap="Variable utility with CART or Parametric synthesis for 6 best performing visit sequences"}
+knitr::include_graphics("H:/IPSDS/Master thesis/Pictures/synmeth2.png")
+```
+
+```{r joyreadtest, eval=F}
+x <- obs[!is.na(obs$wlem) & 
+           !is.na(obs$marks) & 
+           !is.na(obs$hisei08) & 
+           !is.na(obs$wealth) & 
+           !is.na(obs$fas) &
+           !is.na(obs$inccap),]
+for (v in c(1,2,5,7,8,13,14,15)){
+  x[v] <- as.factor(x[,v])
+}
+reg1 <- lm(joyreadp ~ .*. + 
+            poly(wlem,3) + 
+            poly(marks,3) + 
+            poly(hisei08, 3) + 
+            poly(wealth, 3) + 
+            poly(fas, 3) + 
+            poly(inccap, 3), data=x)
+reg2 <- lm(joyreadp ~ ., data=x)
+rsq1 <- summary(reg1)$adj.r.squa
+rsq2 <- summary(reg2)$adj.r.squa
+
+#check sqaure-root transform
+x$joyreadpt <- sqrt(max(x$joyreadp,na.rm=T)+1+x$joyreadp)
+reg3 <- lm(joyreadpt ~.-joyreadp, data=x)
+
+png(file="H:/IPSDS/Master thesis/Pictures/joyread_trans.png",width=800, height=600, res=150)
+plot(density(resid(reg3)),col="red",main="Parental reading interest (joyreadp) [square-root transformed]",ylab="",xlab="Residuals",lwd=2,cex.main=0.9)
+dev.off()
+
+png(file="H:/IPSDS/Master thesis/Pictures/joyread.png",width=800, height=600, res=150)
+plot(density(resid(reg2)),col="red",main="Parental reading interest (joyreadp)",ylab="",xlab="Residuals",lwd=2,cex.main=0.9)
+dev.off()
+
+plot(density(resid(reg1)),col="red",main="Parental reading interest (joyreadp)",ylab="",xlab="Residuals",lwd=2,cex.main=0.9)
+
+```
+Each panel in Figure 4 contains the utility in $S\_pMSE$ for one of the 15 variables. The vertical axis list 12 synthesis runs (the best 6 sequences for both CART- and Parametric synthesis) and orders them by their $S\_pMSE$ to get a better idea if some variables consistently perform better with either CART or Parametric data synthesis. Most of the variables show a mixed picture where, depending on the sequencing, either CART or parametric modeling leads to the lowest $S\_pMSE$. However, there are some variables for which it is relatively clear that CART synthesis outperforms parametric modeling. It should be noted that this comparison is only between CART and a relatively straightforward parametric model that includes all remaining variables as main effects without any interactions or higher order polynomials. The parametric modelling could be improved to better model the data generating process or, for continuous variables, some data transformation can be performed to better approximate normality and improve the fit of the linear synthesis models. For example, the variable *joyreadp* (parental reading interest) has a left-skewed distribution that is relatively poorly modeled by fitting a linear regression model. Figure 5 shows a density plot of the regression residuals for the  parametric (linear) model for *joyreadp* that would hypothetically be used as a synthesizer. The left-skewness of the residuals indicates that the linear model is not a great fit for the observed data. \par 
+
+```{r joyread.fig, fig.align='center', out.width="50%", fig.cap="Regression residuals density plot."}
+knitr::include_graphics("H:/IPSDS/Master thesis/Pictures/joyread.png")
+```
+
+To check whether some data transformation or more complex model could improve the fit of a linear model, I separately perform a square-root transformation on *joyreadp* and run a linear model that includes a range of interaction terms as well as second and third order polynomials for all continuous variables. The square-root transformation of *joyreadp* does improve the fit of the linear synthesis model, the residuals are smaller but the distribution of the residuals still exhibit the same skewness seen in Figure 5 (see Figure 11 in Appendix). In terms of expanding the linear model, adding interaction and higher order terms does not improve the model fit in terms of regression residuals, it only marginally increases the explained variance from 0.13 to 0.15 (McFadden adjusted R-squared). Even with these marginal improvements, it seems reasonable to only consider CART models for *joyreadp* since this would likely lead to synthetic data with better utility without the need for more complex modelling or data transformations. \par
+
+```{r model.pick, eval=F}
+#Run find_model.R fist 
+load("H:/IPSDS/Master thesis/Data/test_model_redux4.RData")
+test.model$Model <- str_replace_all(test.model$Model, "parametric", "P")
+test.model$Model <- str_replace_all(test.model$Model, "cart", "C")
+test.model$Model <- str_replace_all(test.model$Model, "sample", "s")
+n <- ggplot(test.model, aes(x=S_pMSE.c, y=S_pMSE.l, shape=Sequence)) +
+   geom_point() +
+   ylim(0,3) +
+   xlim(1,5) +
+   scale_shape_manual(values=c(16,17,15,7,3,4,2,1))+
+   ggtitle(label="") +
+   ylab("S_pMSE (Logit)") +
+   xlab("S_pMSE (CART)") +
+   gghighlight(S_pMSE.l < 1, S_pMSE.c < 2.5, label_key = Model, label_params = list(size = 3)) +
+   theme(strip.text.x = element_text(size=6),
+         axis.text=element_text(size=6),
+         axis.title = element_text(size=8),
+         legend.title = element_text(size=10),
+         legend.text = element_text(size=8))
+    png(file="H:/IPSDS/Master thesis/Pictures/model2.png",width=1200, height=700, res=150)
+    n
+    dev.off()
+```
+
+```{r model.pick.fig, out.width="95%", fig.cap="CART / parametric modeling per visit sequence."}
+knitr::include_graphics("H:/IPSDS/Master thesis/Pictures/model2.png")
+```
+
+For the six visit sequences, I test which combination of modelling will lead to the smallest $S\_pMSE$. For the variables *sex, ls_req, hisei08, wealth, joyreadp,* and *fas* I will only consider CART modelling, for the variables *langreg, wlem, marks, pareduc, inccap, aspmf,* and *us_enroll* I will test both CART and parametric models, and for *immig,* and *aspideal* I will look at parametric models exclusively. Since only half of the 15 variables can vary between models, a total of $\prod_{n=1}^{7}(2!)$ or 128 different combinations per visit sequence have to be tested. Figure 6 shows the best performing modelling and variable visit sequences, with capital letters "C" and "P" standing for "CART" and "parametric", respectively, and lower case letter "s" standing for "sample" (i.e. the first variable in the synthesis sequence). Again, the numbers in the sequences correspond to the position of the variables in the data set (i.e. the variable numbers in Table 1). I will use these modelling parameters to run the final data synthesis: \par
+
+\textbf{Table 2: Synthesis sequence and modelling}
+
+\setstretch{1.2}
+\scriptsize
+| Synthesis order | Variable name| Variable number   | Variable description   | Synthesis model|
+|:----|:----|:------|:----------------------------|:-----|
+| 1   | inccap    | 12 | Embodied cultural capital                       | sample    |
+| 2   | marks     | 4  | Mean school marks (test-language/maths/science) | CART      |
+| 3   | wlem      | 3  | Maths test: weighted likelihood estimates (WLE) | CART      |
+| 4   | pareduc   | 7  | Parents' highest educational attainment         | parametric|
+| 5   | langreg   | 2  | Language region                                 | CART      |  
+| 6   | sex       | 1  | Gender of respondent                            | CART      |
+| 7   | wealth    | 9  | Household possessions: family wealth            | CART      |
+| 8   | fas       | 11 | Family affluence scale                          | CART      |
+| 9   | joyreadp  | 10 | Parental reading interest                       | CART      |
+| 10  | hisei08   | 6  | Highest parental occupational code (ISEI 08)    | CART      |
+| 11  | aspideal  | 14 | Student's idealistic educational aspirations    | parametric|
+| 12  | immig     | 8  | Immigration status                              | parametric|
+| 13  | us_enroll | 15 | Upper-secondary: education enrollment           | parametric|
+| 14  | ls_req    | 5  | Lower-secondary school requirements             | CART      |
+| 15  | aspmf     | 13 | Parents' educational aspirations                | CART      |  
+\setstretch{2}
+\normalsize
+
+Only variables *pareduc*, *immig*, *aspideal*, and *us_enroll* will be synthesized by fitting parametric models. Of those, *immig*, *aspideal*, and *us_enroll* are categorical variables which will be modeled by fitting multinomial logit models. Variable *pareduc* would normally be dichotomous, however, since missing values are treated as separate categories in the synthesis process, this variable will also be treated as categorical and be synthesized by fitting a multinomial logit model. The variable *pareduc* is the fourth synthesized variable and the synthesis model only has three explanatory variables (*inccap*, *marks*, and *wlem*). The variables *immig*, *aspideal*, and *us_enroll* are all synthesized later in the sequence (12th, 11th, and 13th place, respectively) and contain all prior synthesized variables as predictors. \par
+
+```{r modelfit, eval = F}
+d <- obs 
+d[is.na(d$pareduc),"pareduc"] <- 3 
+d[is.na(d$ls_req),"ls_req"] <- 5
+d[is.na(d$immig),"immig"] <- 4
+d[is.na(d$aspmf),"aspmf"] <- 5
+d[is.na(d$aspideal),"aspideal"] <- 3
+for (v in c(1,2,5,7,8,13,14,15)){
+  d[v] <- as.factor(d[,v])
+}
+x <- multinom(pareduc ~ inccap + marks + wlem,
+              data=d)
+y <- multinom(immig ~ .-us_enroll-ls_req-aspmf,
+              data=d)
+z <- multinom(aspideal ~ .-immig-us_enroll-ls_req-aspmf,
+              data=d)
+u <- multinom(us_enroll ~ .-ls_req-aspmf,
+              data=d)
+png(file="H:/IPSDS/Master thesis/Pictures/resid.png",width=900, height=900, res=150)
+par(mfrow=c(2,2))
+plot(density(resid(x, type='deviance')),col="red",xlab="",main="pareduc: Education parents",lwd=2,cex.main=0.9)
+plot(density(resid(y, type='deviance')),col="red",xlab="",ylab="",main="immig: Immigration status",lwd=2,cex.main=0.9)
+plot(density(resid(z, type='deviance')),col="red",main="aspideal: Education aspirations",xlab="Deviance residuals",lwd=2,cex.main=0.9)
+plot(density(resid(u, type='deviance')),col="red",main="us_enroll: Enrollment upper-sec.",ylab="",xlab="Deviance residuals",lwd=2,cex.main=0.9)
+dev.off()
+```
+
+```{r modelfit.fig, out.width="60%", fig.align='center', fig.cap="Deviance residuals for multinominal logit synthesis models."}
+knitr::include_graphics("H:/IPSDS/Master thesis/Pictures/resid.png")
+```
+
+To see how well these models describe the data, Figure 7 shows the density plots for the deviance regression residuals for *pareduc*, *immig*, *aspideal*, and *us_enroll*. Deviance residuals are a useful diagnostic tool in situations where model-fitting is achieved by maximum likelihood estimation [Pierce and Schafer -@pierce1986]. The residuals are calculated by comparing the fitted values in the specified model versus a fully-saturated model that perfectly describes the observed data by including a separate parameter for each observation. The deviance residuals measure how much the estimated probabilities of the specified model differ from the estimated probabilities in the fully-saturated model. The regression models for *immig*, *aspideal*, and *us_enroll* seem to fit the data quite well since the residuals mostly spike around zero. The residuals for *pareduc* show that there are some more discrepancies between the observed and estimated values in the regression model but the residuals are generally still small. \par 
+
+```{r factorize}
+for (v in c(1,2,5,7,8,13,14,15)){
+  obs[v] <- as.factor(obs[,v])
+}
+```
+
+```{r synthesis, eval=F}
+set.seed(6541)
+m <- 5
+vseq <- c(12,4,3,7,2,1,9,11,10,6,14,8,15,5,13) 
+model <- c("cart", #1 sex
+            "cart", #2 langreg
+            "cart", #3 wlem
+            "cart", #4 marks
+            "cart", #5 ls_req
+            "cart", #6 hisei08
+            "parametric", #7 pareduc
+            "parametric", #8 immig
+            "cart", #9 wealth
+            "cart", #10 joyreadp
+            "cart", #11 fas
+            "sample", #12 inccap
+            "cart", #13 aspmf
+            "parametric", #14 aspideal
+            "parametric" #15 us_enroll
+            )
+rm(v)
+syn <- syn(obs,
+        m=m,
+        method=model,
+        visit.sequence=vseq
+)
+setwd("H:/IPSDS/Master thesis/Data")
+save(syn, file="syn2.RData")
+```
+
+```{r loadsyn}
+load("H:/IPSDS/Master thesis/Data/syn2.Rdata")
+```
+
+```{r compare.synth, eval=F}
+comp <- compare.synds(syn,obs,
+                      nrow=5,
+                      ncol=3,
+                      breaks = 10,
+                      stat = "percents",
+                      rel.size.x = 0.5
+                      )
+```
+\newpage
+## Data utility 
+
+```{r comp.plot, eval=F}
+comp.data <- as.data.frame(comp$plots[[1]])
+levels(comp.data$Value)[levels(comp.data$Value)=='miss.NA'] <- NA
+comp.data$Variable <- sub(":.+", "", comp.data$Variable)
+comp.data$Variable <- factor(comp.data$Variable, levels = c("sex","langreg","wlem","marks","ls_req","hisei08","pareduc","immig","wealth","joyreadp","fas","inccap","aspmf","aspideal","us_enroll"),ordered=T)
+p <- ggplot(comp.data, aes(x=Value, y=Percent,fill=Data)) +
+  geom_col(position = "dodge") +
+  facet_wrap(~ Variable, scales = "free", nrow=4, ncol=4, shrink=F) +
+  theme_bw() + 
+  theme(axis.text=element_text(size=5),
+        legend.position="top",
+        legend.title = element_blank(),
+        legend.text = element_text(size=8),
+        axis.title = element_text(size=8),
+        strip.text.x = element_text(size=6)
+        ) 
+    png(file="H:/IPSDS/Master thesis/Pictures/comp.png",width=1200, height=900, res=150)
+    p
+    dev.off()
+```
+
+```{r comp.fig, out.width="100%", fig.cap="Marginal distributions for synthetic and observed data."}
+knitr::include_graphics("H:/IPSDS/Master thesis/Pictures/comp.png")
+```
+
+With the sequence and modelling parameters set in section 4.2, I generate five synthetic data sets using *synthpop* [Nowok et al. -@nowok2016]. As mentioned previously, missing values in the observed data are retained in the synthetic data. Figure 8 plots the marginal distributions of each of the 15 variables in the synthetic and the observed data. The percentages for the synthetic data are based on the pooled sets of generated synthetic data. In the univariate comparison, the synthetic data generally follow the observed data fairly closely. Some more notable differences exist between the synthetic and observed data for the variables *joyreadp* and *fas*. The data synthesis for these variables could likely be improved by adding additional information to the data or tweaking the data and modelling. Both the marginal distributions for *joyreadp* and *fas* are somewhat skewed. Exploring other data transformation techniques or trying out other modelling approaches might improve the utility of the synthetic data, however, doing so is beyond the scope of this paper.\par
+
+To look at the multivariate validity of the data, I run a set of regression models on the synthetic- and the observed data and compare the overlap of the confidence intervals (CI). For each variable, the regression model contains all remaining variables as predictors without any interactions or higher order terms. The variables *sex*, *langreg*, and *pareduc* are estimated by fitting a Logit model, the variables *wlem*, *marks*, *hisei08*, *wealth*, *joyreadp*, *fas*, and *inccap* by fitting a linear model, and the variables *ls_req*, *immig*, *aspmf*, *aspideal*, and *us_enroll* by fitting a multinomial logit model. \par
+
+```{r ci.overlap, message=F, include=F,eval=F}
+m <- compare(glm.synds(sex~.,binomial(link="logit"),syn),obs,population.inference = T,incomplete=T, plot='coef')$ci.overlap
+ci <- data.frame(y="sex",x=rownames(m),ci.overlap=m[,1])
+m <- compare(glm.synds(langreg~.,binomial(link="logit"),syn),obs,population.inference = T,incomplete=T, plot='coef')$ci.overlap
+t <- data.frame(y="langreg",x=rownames(m),ci.overlap=m[,1])
+ci <- rbind(ci,t)
+m <- compare(glm.synds(wlem~ .,gaussian,syn),obs,population.inference = T,incomplete=T, plot='coef')$ci.overlap
+t <- data.frame(y="wlem",x=rownames(m),ci.overlap=m[,1])
+ci <- rbind(ci,t)
+m <- compare(glm.synds(marks~ .,gaussian,syn),obs,population.inference = T,incomplete=T, plot='coef')$ci.overlap
+t <- data.frame(y="marks",x=rownames(m),ci.overlap=m[,1])
+ci <- rbind(ci,t)
+m <- compare(multinom.synds(ls_req~.,syn),obs,population.inference = T,incomplete=T, plot='coef')$ci.overlap
+t <- data.frame(y="ls_req",x=rownames(m),ci.overlap=m[,1])
+ci <- rbind(ci,t)
+m <- compare(glm.synds(hisei08~ .,gaussian,syn),obs,population.inference = T,incomplete=T, plot='coef')$ci.overlap
+t <- data.frame(y="hisei08",x=rownames(m),ci.overlap=m[,1])
+ci <- rbind(ci,t)
+m <- compare(glm.synds(pareduc~.,binomial(link="logit"),syn),obs,population.inference = T,incomplete=T, plot='coef')$ci.overlap
+t <- data.frame(y="pareduc",x=rownames(m),ci.overlap=m[,1])
+ci <- rbind(ci,t)
+m <- compare(multinom.synds(immig~.,syn),obs,population.inference = T,incomplete=T, plot='coef')$ci.overlap
+t <- data.frame(y="immig",x=rownames(m),ci.overlap=m[,1])
+ci <- rbind(ci,t)
+m <- compare(glm.synds(wealth~ .,gaussian,syn),obs,population.inference = T,incomplete=T, plot='coef')$ci.overlap
+t <- data.frame(y="wealth",x=rownames(m),ci.overlap=m[,1])
+ci <- rbind(ci,t)
+m <- compare(glm.synds(joyreadp~ .,gaussian,syn),obs,population.inference = T,incomplete=T, plot='coef')$ci.overlap
+t <- data.frame(y="joyreadp",x=rownames(m),ci.overlap=m[,1])
+ci <- rbind(ci,t)
+m <- compare(glm.synds(fas~ .,gaussian,syn),obs,population.inference = T,incomplete=T, plot='coef')$ci.overlap
+t <- data.frame(y="fas",x=rownames(m),ci.overlap=m[,1])
+ci <- rbind(ci,t)
+m <- compare(glm.synds(inccap~ .,gaussian,syn),obs,population.inference = T,incomplete=T, plot='coef')$ci.overlap
+t <- data.frame(y="inccap",x=rownames(m),ci.overlap=m[,1])
+ci <- rbind(ci,t)
+m <-compare(multinom.synds(aspmf~.,syn),obs,population.inference = T,incomplete=T, plot='coef')$ci.overlap
+t <- data.frame(y="aspmf",x=rownames(m),ci.overlap=m[,1])
+ci <- rbind(ci,t)
+m <-compare(multinom.synds(aspideal~.,syn),obs,population.inference = T,incomplete=T, plot='coef')$ci.overlap
+t <- data.frame(y="aspideal",x=rownames(m),ci.overlap=m[,1])
+ci <- rbind(ci,t)
+m <-compare(multinom.synds(us_enroll~.,syn),obs,population.inference = T,incomplete=T, plot='coef')$ci.overlap
+t <- data.frame(y="us_enroll",x=rownames(m),ci.overlap=m[,1])
+ci <- rbind(ci,t)
+ci <- ci[ci$x!="(Intercept)",]
+```
+
+```{r ci.plot,echo=F, eval=F}
+ci$y <- factor(ci$y, levels = c("sex","langreg","wlem","marks","ls_req","hisei08","pareduc","immig",
+             "wealth","joyreadp","fas","inccap","aspmf","aspideal","us_enroll"),ordered=T)
+c <- ggplot(ci, aes(x=y,y=ci.overlap)) + 
+  geom_boxplot() + 
+  ylab("95% CI overlap") +
+  xlab("") + 
+  scale_x_reordered() + 
+  theme(axis.text=element_text(size=7),
+        axis.title=element_text(size=8)) + 
+  ylim(0.2,1)
+    png(file="H:/IPSDS/Master thesis/Pictures/cioverlap4.png",width=1000, height=600, res=150)
+    c
+    dev.off()
+```
+
+```{r ci.fig, out.width="90%", fig.align='center', fig.cap="Box-plot for confidence interval overlaps per outcome variable"}
+knitr::include_graphics("H:/IPSDS/Master thesis/Pictures/cioverlap3.png")
+```
+
+Figure 9 plots the distribution of the CI overlaps for all the regression coefficients in each of the 15 regression models. The median CI overlap generally lies around or above the 75 percent line. However, for some variables a significant number of coefficients overlap relatively poorly. Specifically, the tail ends of the CI-overlap distributions of *hisei08* and *aspideal* are rather long, indicating that, for these models, a larger share of the point estimates' CI fitted on the synthetic data deviate from those fitted on the original data. In some cases, this lack of overlap is partially driven by point estimates with a high *p*-value in both the regressions on the original and synthetic data (see Appendix for detailed regression outputs and CI comparison for *hisei08*). A further step that could be taken is fine-tuning the comparison for each variable by dropping these estimators from the regression models to check whether or not this improves the CI overlaps. \par
+
+## Disclosure risk 
+The appropriate measure of disclosure risk of disseminating synthetic data based on linked data from the TREE panel survey and the LABB register is identifying the added risk of disclosing information about the true value of educational outcomes, in particular for those who explicitly or implicitly refused to disclose this information in the TREE panel survey. For the calculation of the *Targeted Correct Attribution Probability* (TCAP), the target variable is therefore defined as the upper-secondary enrollment in 2017. As key variables, it seems reasonable to pick demographic and background information that might be available in other publicly available data sources. Therefore, I define vectors $K$ and $T$ as: \par
+
+\hfil \begin{equation}K=\{sex, langreg, ls\_req, pareduc, immig\}\end{equation} \par
+
+\hfil \begin{equation}T=\{us\_enroll\}\end{equation} \par
+
+Figure 10 plots the percentage of rows in each of the five synthetic data sets that have a WEAP score of one (i.e. synthetic records for which the combination fo key variables can uniquely identify the target variables), plus, for those records, the mean TCAP score. \par 
+
+```{r tctab, eval=F}
+tctab <- data.frame()
+source("H:/IPSDS/Master thesis/tcap.R")
+for (i in 1:length(syn$syn[])){
+  y <- tcap(syn$syn[[i]],obs,c(1,2,5,7,8),c(15))
+  #y$run <- i 
+  x <- data.frame(run=i, rows=nrow(y), t=mean(y$tcap))
+  tctab <- rbind(x, tctab)
+}
+setwd("H:/IPSDS/Master thesis/Data")
+save(tctab, file="tctab4.RData")
+```
+
+```{r tcplot, eval=F}
+setwd("H:/IPSDS/Master thesis/Data")
+load("tctab4.RData")
+tctab$rows <- tctab$rows/8429*100
+b <- tctab %>% 
+  ggplot() +
+  geom_col(aes(x=run, y=rows),fill="grey",alpha=0.5,width=0.4,color="black") +
+  geom_point(aes(x=run,y=t, color="Mean TCAP score"), size=2) + 
+  xlab("Synthetic data set") + 
+  ylab("% rows WEAP = 1") + 
+  theme_minimal() +
+  theme(axis.title=element_text(size=7),
+        axis.text=element_text(size=6),
+        legend.text = element_text(size=8)) +  
+  scale_color_manual(name='',breaks=c('Mean TCAP score'),values=c('Mean TCAP score'='red'))
+png(file="H:/IPSDS/Master thesis/Pictures/tcap.png",width=800, height=500, res=150)
+b
+dev.off() 
+```
+
+```{r tcfig,out.height="100%",fig.align="center",fig.cap="TCAP score per generated synthetic data set."}
+knitr::include_graphics("H:/IPSDS/Master thesis/Pictures/tcap.png")
+```
+
+Figure 10 shows that the risk of disclosure fluctuates between the synthetic data sets. The share of rows in each synthetic data with a WEAP score of one (records for which the combination of key variables can uniquely identify the target variables) fluctuates between 0.25 and 0.01 percent. In data set four, only 0.01 percent of synthetic records have a WEAP score of one and the risk of disclosure, measured by TCAP, is zero. For the other data sets, the mean TCAP score fluctuates between 0.81 and 0.55. This means that for the rows with a WEAP score of one, not all of them pose an equal risk of disclosure with regard to the true value of the target variable in the original data. The closer the TCAP is to one, the higher the risk associated with publishing that particular data set. However, it is not fully clear how to interpret this risk. Even if rows can be identified in the synthetic data that have a low variability in the target variable given some unique configurations of the key variables, without prior knowledge, it would not be unclear to an attacker if this low variability in the target variable, given the key variables, is also present in the original data. However, if the disclosure of the target variable is deemed especially sensitive, to reduce the risk to an absolute minimum, only synthetic data sets with a TCAP score below a particular threshold could be published (e.g. with a max TCAP would be set at 0.6 only synthetic data sets 4 and 5 would be published). Limiting the amount of synthetic data to be released in this way would diminish the utility of the data since they would be more susceptible to misspecification of the underlying synthesis models. Making a trade-off between utility and disclosure risk ultimately depends on the use-case of the synthetic data and the sensitivity of original data. In the case of the linked TREE and LABB data, the true values of educational outcomes for those who explicit or implicit refuse to participate in the TREE panel survey should be deemed extremely sensitive. Even if the true risk of disclosure is difficult to determine, I think it would be prudent to reduce even the perceived risk of disclosure by publishing only synthetic data that do not contain any records with a TCAP score above 0.5. \par 
+
+# Conclusion
+The aim of this paper is to illustrate the feasibility of generating synthetic data based on linked panel survey and register data. The main motivation for this exercise is the knowledge that panel attrition can lead to biases in survey statistics. Ideally, panel survey data could be supplemented with data taken from official registries, wherever available. However, with participation in panel surveys usually comes the explicit consent to have this information (anonymously) published. Nonresponse, in that way, can be seen as an explicit or implicit refusal for the disclosure of such information, even in anonymous form. Therefore, even if information from registries could be used to complement panel survey data, it would neither be ethical nor legal, in most cases, to publish this data without additional layers of disclosure control. \par
+
+In this paper, I have shown that such an approach is feasible. Generating synthetic data based on linked panel survey and register data can produce statistical products that have a reasonable level of utility without adding much risk of disclosure if they were to be disseminated. Ideally, such a product could be used in a similar way to the synthetic versions of the EU-SILC published by Eurostat. If publicly available, researchers could develop their analyses on the synthetic version of the linked TREE and LABB data and check their results on the original data in a more controlled setting. \par  
+
+The synthesis models used in this paper are fairly straightforward and with more model fine-tuning I believe that the utility of a final statistical product could be further improved. In addition, I have selected the synthesis variables to best fit the modelling of educational outcomes with an overall straightforward data structure. The selection of variables and the complexity of the data could be expended to facilitate a wider range of analyses. Here it is important to note that I have approached the data synthesis process by using brute-force tactics in setting the variable synthesis sequence and the modelling choices for each individual variable. An upside to this process is that it is easy to implement and, as I have shown, it can lead to synthetic data that have good utility. However, a major downside to this approach is that it quickly becomes computationally prohibitive when more synthetic variables are added. Even with only a handful of variables, I had to make some informed decisions on how to compare the synthesis sequences and the modelling of each variable. Still, with increasing computing power, such automated approaches will likely be more feasible in the future, making it easier and quicker for data producers to make and disseminate synthetic statistical products of sensitive micro-data. \newpage   
+
+# References {-}
+\setstretch{1}
+::: {#refs}
+:::
+\newpage
+# Appendix {-}
+\textbf{Generalized linear model for variable \textit{hisei08} on original data.} 
+\footnotesize
+```{r hisei08.obs, comment=NA, message=F}
+summary(glm(hisei08~ .,gaussian,obs))
+``` 
+\newpage
+\normalsize
+\textbf{Generalized linear model for variable \textit{hisei08} on pooled synthetic data} \newline
+\footnotesize
+```{r hisei08.syn, comment=NA}
+summary(glm.synds(hisei08~ .,gaussian,syn))
+``` 
+\newpage 
+\normalsize
+\textbf{CI overlap between generalized linear models for variable \textit{hisei08}} 
+\footnotesize
+```{r hisei08.comp, comment=NA}
+compare(glm.synds(hisei08~ .,gaussian,syn),obs,population.inference = T,incomplete=T, plot='coef')
+``` 
+\par
+\normalsize
+Figure 11: Regression residuals for linear model fit *joyreadp* after square-root transformation.
+```{r joyread_trans.fig, fig.align='center', out.width="60%", fig.cap="Regression residuals density plot."}
+knitr::include_graphics("H:/IPSDS/Master thesis/Pictures/joyread_trans.png")
+```
