@@ -7,7 +7,7 @@ author:
 - "Supervisor: Jörg Drechsler" 
 - "Examinator: Stefan Bender"
 - "Link to [Github repository](https://github.com/mwkoomen/Master_thesis_DSM) with R code."
-date: "`r format(Sys.time(), '%d %m, %Y')`"
+date: "`r format(Sys.time(), '%d-%m-%Y')`"
 output:
   pdf_document:
     highlight: espresso
