@@ -3,7 +3,7 @@
 ### Master thesis in Applied Data Science & Measurement (Mannheim Business School)
 
 - Author: Maarten Koomen
-- Main thesis text [here](Mitigating_panel_attrition_with_syndata.pdf) (pdf) [word count: 8,873]<br> <br>
+- Main thesis text [here](Mitigating_panel_attrition_with_syndata.pdf) (pdf - word count: 8,873)<br> <br>
 
 ### Code and guide for reproduction
 
